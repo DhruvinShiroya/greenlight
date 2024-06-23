@@ -57,7 +57,7 @@ func main() {
 	// the config struct and uses athe servemux we created about as the handler
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", app.config.port),
-		Handler:      mux,
+		Handler:      app.routes(),
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -65,7 +65,7 @@ func main() {
 
 	// starts the HTTP server
 	logger.Printf("Starting %s server on %s", config.env, srv.Addr)
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	logger.Fatal(err)
 
 }
