@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -33,6 +35,7 @@ type Config struct {
 type application struct {
 	config Config
 	logger *log.Logger
+	models data.Models
 }
 
 func main() {
@@ -49,7 +52,7 @@ func main() {
 	// Read the db connection pool maxOpenConns, maxIdleConns , maxIdleTime
 	flag.IntVar(&config.db.maxOpenConns, "db-max-open-conns", 25, "Postgres max open connection")
 	flag.IntVar(&config.db.maxIdleConns, "db-max-idle-conns", 25, "Postgres max idle connection")
-	flag.StringVar(&config.db.maxIdleTime, "db-max-idle-time", "15m", "Postgres max connection idle connection")
+	flag.StringVar(&config.db.maxIdleTime, "db-max-idle-time", "15m", "Postgres max idle connection timeout")
 	flag.Parse()
 
 	// initialize the new logger which writes to the out stream
@@ -73,15 +76,10 @@ func main() {
 	app := &application{
 		config: config,
 		logger: logger,
+		models: data.NewModel(db),
 	}
-
-	// create a new instance of servemux and add "/v1/healthcheck" route which dispatch requests
-	// to healthcheck method
-	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/healthcheck", app.healthcheckHandler)
-
+	// use httprouter instance return from app.routes() as server handler
 	// declare the http server with some timeout setting , which listen on provided port
-	// the config struct and uses athe servemux we created about as the handler
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", app.config.port),
 		Handler:      app.routes(),
