@@ -62,7 +62,7 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		//only carry out the ratelimit if enabled
-		if app.config.limiter.enabled {
+		if app.config.limiter.enable {
 
 			// extract client ip address from request
 			ip, _, err := net.SplitHostPort(r.RemoteAddr)
