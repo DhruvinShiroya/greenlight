@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DhruvinShiroya/greenlight/internal/data"
+	"github.com/DhruvinShiroya/greenlight/internal/jsonlog"
 	_ "github.com/lib/pq"
 )
 
@@ -27,6 +28,13 @@ type Config struct {
 		maxIdleConns int
 		maxIdleTime  string
 	}
+
+	// limiter struct for limiting incoming request per second and burst value and boolean for enable and disable/ disable rate limiting
+	limiter struct {
+		rps    float64
+		burst  int
+		enable bool
+	}
 }
 
 // define the application struct to hold dependencies for our HTTP handlers , helpers
@@ -34,7 +42,7 @@ type Config struct {
 // , but it will grow to include a lot more as out build progresses
 type application struct {
 	config Config
-	logger *log.Logger
+	logger *jsonlog.Logger
 	models data.Models
 }
 
@@ -53,11 +61,21 @@ func main() {
 	flag.IntVar(&config.db.maxOpenConns, "db-max-open-conns", 25, "Postgres max open connection")
 	flag.IntVar(&config.db.maxIdleConns, "db-max-idle-conns", 25, "Postgres max idle connection")
 	flag.StringVar(&config.db.maxIdleTime, "db-max-idle-time", "15m", "Postgres max idle connection timeout")
+	// command line flags to to read the setting value of config structs
+	// rate limit is enable by default and need to be disable only if in development mode if needed
+	flag.Float64Var(&config.limiter.rps, "limiter-rps", 4, "Rate limiter maximum request per second")
+	flag.IntVar(&config.limiter.burst, "limiter-burst", 8, "Rate limiter maximum burst request")
+	flag.BoolVar(&config.limiter.enable, "limiter-enable", true, "Enable rate limiter")
+
 	flag.Parse()
 
 	// initialize the new logger which writes to the out stream
 	// prefixed with current date and time
-	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+	// logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+
+	// initialze new json logger which writes any message (at or above)
+	// severity level to the standard out stream
+	logger := jsonlog.NewLogger(os.Stdout, jsonlog.LevelInfo)
 
 	// call openDB() function to create connection pool
 	db, err := openDb(config)
@@ -69,7 +87,8 @@ func main() {
 	defer db.Close()
 
 	// print if the connection was established successfully
-	fmt.Println("database connection is established")
+	// update information to the new json logger
+	logger.PrintInfo("database connection is established", nil)
 
 	// declare the instance of the application struct
 	// provide the config and logger instance
@@ -88,10 +107,16 @@ func main() {
 		WriteTimeout: 30 * time.Second,
 	}
 
+	// Print the server address and environment information to logger message at info level
+	// pass the additional properties to the logger
+	logger.PrintInfo("Starting server :", map[string]string{
+		"addr": srv.Addr,
+		"env":  config.env,
+	})
+
 	// starts the HTTP server
-	logger.Printf("Starting %s server on %s", config.env, srv.Addr)
 	err = srv.ListenAndServe()
-	logger.Fatal(err)
+	logger.PrintFatal(err, nil)
 
 }
 
