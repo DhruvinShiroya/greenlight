@@ -18,7 +18,7 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 			// and close the connection and set relevant headers
 			if err := recover(); err != nil {
 				w.Header().Set("Connection", "closed")
-				//recover return interface{} which can be used for error value
+				// recover return interface{} which can be used for error value
 				// by converting it to fmt.Errorf() and call serverErrorResponse function
 				// to write error to response
 				app.serverErrorResponse(w, r, fmt.Errorf("%s", err))
@@ -28,8 +28,7 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 	})
 }
 
-func (app *application) rateLimit(next http.Handler) http.Handler {
-	// define client struct which will hold rate limiter and last seen time
+func (app *application) rateLimit(next http.Handler) http.Handler { // define client struct which will hold rate limiter and last seen time
 	type client struct {
 		limiter  *rate.Limiter
 		lastSeen time.Time
@@ -43,7 +42,6 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
 	// launch a background go routine which removes old entries from the
 	// client map every one minute
 	go func() {
-
 		time.Sleep(time.Minute)
 
 		// lock mutex for inactive client clean up
@@ -61,7 +59,7 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
 	}()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//only carry out the ratelimit if enabled
+		// only carry out the ratelimit if enabled
 		if app.config.limiter.enable {
 
 			// extract client ip address from request
@@ -97,5 +95,4 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-
 }
