@@ -15,7 +15,7 @@ import (
 // also create a custom password type
 type User struct {
 	ID        int64     `json:"id"`
-	CreateAt  time.Time `json:"create_at"`
+	CreateAt  time.Time `json:"created_at"`
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
 	Password  password  `json:"-"`
@@ -59,13 +59,13 @@ func (p *password) Matches(plaintextPassword string) (bool, error) {
 
 func ValidatePassword(v *validator.Validator, password string) {
 	v.Check(password != "", "password", "must be provided")
-	v.Check(len(password) > 8, "password", "password length must be greater than 8 bytes long")
-	v.Check(len(password) < 75, "password", "password length must be less than 75 bytes long")
+	v.Check(len(password) >= 8, "password", "password length must be greater than 8 bytes long")
+	v.Check(len(password) <= 75, "password", "password length must be less than 75 bytes long")
 }
 
 func ValidateEmail(v *validator.Validator, email string) {
 	v.Check(email != "", "email", "email must be provided")
-	v.Check(validator.Matches(email, validator.EmailRX), "email", "must be provided valid email address")
+	v.Check(validator.Matches(email, validator.EmailRX), "email", "must be provided valid email address this is error")
 }
 
 func ValidateUser(v *validator.Validator, user *User) {
@@ -102,9 +102,9 @@ func (m UserModel) Insert(user *User) error {
 	query := `
     INSERT INTO users (name, email, activated, password_hash)
     VALUES ($1 , $2, $3, $4)
-    RETURNING id, create_at, version`
+    RETURNING id, created_at, version`
 
-	args := []interface{}{user.Name, user.Password, user.Activated, user.Password.hash}
+	args := []interface{}{user.Name, user.Email, user.Activated, user.Password.hash}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
