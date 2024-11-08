@@ -4,9 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"flag"
-	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
@@ -97,28 +95,12 @@ func main() {
 		logger: logger,
 		models: data.NewModel(db),
 	}
-	// use httprouter instance return from app.routes() as server handler
-	// declare the http server with some timeout setting , which listen on provided port
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", app.config.port),
-		Handler:      app.routes(),
-		ErrorLog:     log.New(logger, "", 0),
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-	}
-
-	// Print the server address and environment information to logger message at info level
-	// pass the additional properties to the logger
-	logger.PrintInfo("Starting server :", map[string]string{
-		"addr": srv.Addr,
-		"env":  config.env,
-	})
 
 	// starts the HTTP server
-	err = srv.ListenAndServe()
-	logger.PrintFatal(err, nil)
-
+	err = app.serve()
+	if err != nil {
+		logger.PrintFatal(err, nil)
+	}
 }
 
 func openDb(cfg Config) (*sql.DB, error) {

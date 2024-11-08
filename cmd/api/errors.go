@@ -23,7 +23,6 @@ func (app *application) errorResponse(w http.ResponseWriter, r *http.Request, st
 		app.logError(r, err)
 		w.WriteHeader(500)
 	}
-
 }
 
 // the serverErrorResponse() method will be used when our application encounters an
