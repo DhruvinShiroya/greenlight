@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/DhruvinShiroya/greenlight/internal/validator"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -16,7 +18,6 @@ import (
 type envelope map[string]interface{}
 
 func (app *application) readIDParam(r *http.Request) (int64, error) {
-
 	// any request parameter in httprouter will be stored in request context
 	params := httprouter.ParamsFromContext(r.Context())
 
@@ -27,11 +28,9 @@ func (app *application) readIDParam(r *http.Request) (int64, error) {
 	}
 
 	return id, nil
-
 }
 
 func (app *application) writeJSON(w http.ResponseWriter, status int, data interface{}, headers http.Header) error {
-
 	// pass the go object (data) to the json.Marshal() function return []bytes slice
 	// using json.MarshalIndent will result in 65% longer to run and 30% more memory
 	js, err := json.Marshal(data)
@@ -58,7 +57,6 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data interf
 }
 
 func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
-
 	// define maximum size of payload or request body to 1MB
 	maxByte := 1_04_576
 	r.Body = http.MaxBytesReader(w, r.Body, int64(maxByte))
@@ -118,4 +116,60 @@ func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst int
 	}
 
 	return nil
+}
+
+// The background() helper func accepts an function
+func (app *application) background(fn func()) {
+	app.wg.Add(1)
+	go func() {
+		// reover any panic
+		defer app.wg.Done()
+		defer func() {
+			if err := recover(); err != nil {
+				app.logger.PrintError(fmt.Errorf("%s", err), nil)
+			}
+		}()
+
+		fn()
+	}()
+}
+
+func (app *application) readString(qs url.Values, key string, defaultValue string) string {
+	s := qs.Get(key)
+
+	// if not key exist
+	if s == "" {
+		return defaultValue
+	}
+
+	return s
+}
+
+func (app *application) readCSV(qs url.Values, key string, defaultValue []string) []string {
+	csv := qs.Get(key)
+
+	// if not key exist
+	if csv == "" {
+		return defaultValue
+	}
+
+	return strings.Split(csv, ",")
+}
+
+func (app *application) readInt(qs url.Values, key string, defaultValue int, v *validator.Validator) int {
+	// Extract the value from the query string.
+	s := qs.Get(key)
+	// If no key exists (or the value is empty) then return the default value.
+	if s == "" {
+		return defaultValue
+	}
+	// Try to convert the value to an int. If this fails, add an error message to the
+	// validator instance and return the default value.
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		v.AddError(key, "must be an integer value")
+		return defaultValue
+	}
+	// Otherwise, return the converted integer value.
+	return i
 }
