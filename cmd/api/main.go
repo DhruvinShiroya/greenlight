@@ -6,10 +6,12 @@ import (
 	"flag"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/DhruvinShiroya/greenlight/internal/data"
 	"github.com/DhruvinShiroya/greenlight/internal/jsonlog"
+	"github.com/DhruvinShiroya/greenlight/internal/mailer"
 	_ "github.com/lib/pq"
 )
 
@@ -33,6 +35,14 @@ type Config struct {
 		burst  int
 		enable bool
 	}
+	// for mailer
+	smtp struct {
+		host     string
+		port     int
+		username string
+		password string
+		sender   string
+	}
 }
 
 // define the application struct to hold dependencies for our HTTP handlers , helpers
@@ -42,6 +52,8 @@ type application struct {
 	config Config
 	logger *jsonlog.Logger
 	models data.Models
+	mailer mailer.Mailer
+	wg     sync.WaitGroup
 }
 
 func main() {
@@ -65,6 +77,12 @@ func main() {
 	flag.IntVar(&config.limiter.burst, "limiter-burst", 8, "Rate limiter maximum burst request")
 	flag.BoolVar(&config.limiter.enable, "limiter-enable", true, "Enable rate limiter")
 
+	// mailtrap credential for testing and user activation
+	flag.StringVar(&config.smtp.host, "smtp-host", "sandbox.smtp.mailtrap.io", "SMTP host")
+	flag.IntVar(&config.smtp.port, "smtp-port", 2525, "SMTP port")
+	flag.StringVar(&config.smtp.username, "smtp-username", "3df551409fadad", "SMTP username")
+	flag.StringVar(&config.smtp.password, "smtp-password", "", "SMTP password")
+	flag.StringVar(&config.smtp.sender, "smtp-sender", "Greenlight <no-reply@grd8672aa2264bb5eenlight.DhruvinShiroya.net>", "SMTP sender")
 	flag.Parse()
 
 	// initialize the new logger which writes to the out stream
@@ -94,6 +112,7 @@ func main() {
 		config: config,
 		logger: logger,
 		models: data.NewModel(db),
+		mailer: mailer.New(config.smtp.host, config.smtp.port, config.smtp.username, config.smtp.password, config.smtp.sender),
 	}
 
 	// starts the HTTP server
