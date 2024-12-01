@@ -1,0 +1,48 @@
+# openapi/books.yaml
+
+openapi: 3.0.0
+
+servers:
+  - url: /api
+
+info:
+  title: greenlight API
+  version: "1.0"
+  description: ;
+    API responsible for adding and retrive and updating movie and other entities
+paths:
+  /v1/healthcheck:
+    get:
+      description: |
+        get server information
+      responses:
+        "200":
+          description: |
+            Resquest return if the server is in production or development and thier version
+          content:
+            application/json:
+              schema:
+                $ref: "#/cmd/api/healthcheck"
+  /v1/movies:
+    get:
+      description: |
+        Get list of all movies
+      responses:
+        "200":
+          description: |
+            Request successfully returned list of all movies
+          content:
+            application/json:
+              schema:
+                $ref: "#/internal/data/movies"
+    post:
+      description: |
+        post a movie
+      responses:
+        "201":
+          description: |
+            Post Request successfully return
+          content:
+            application/json:
+              schema:
+                $ref: "#/internal/data/movies"
