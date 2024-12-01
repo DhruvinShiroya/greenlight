@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/DhruvinShiroya/greenlight/internal/data"
 	"github.com/DhruvinShiroya/greenlight/internal/validator"
@@ -54,10 +55,85 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		default:
 			app.serverErrorResponse(w, r, err)
 		}
+		return
 	}
 
+	// Afterthe user reocrd has been created in the database , genrerate new activation token
+	token, err := app.models.Token.New(user.ID, time.Minute*10, data.ScopeActivation)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	app.background(func() {
+
+		data := map[string]interface{}{
+			"activationToken": token.Plaintext,
+			"userID":          user.ID,
+		}
+		err = app.mailer.Send(user.Email, "user_welcome.tmpl", data)
+		// send new account id
+		if err != nil {
+			app.logger.PrintError(err, nil)
+			return
+		}
+	})
 	// send 201 for user created status
-	err = app.writeJSON(w, http.StatusCreated, envelope{"user": user}, nil)
+	err = app.writeJSON(w, http.StatusAccepted, envelope{"user": user}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
+
+func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Token string `json:"token"`
+	}
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+	}
+	v := validator.New()
+
+	// validate token string
+	if data.ValidateTokenPlainText(v, input.Token); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+	user, err := app.models.Users.GetForToken(data.ScopeActivation, input.Token)
+	if err != nil {
+		if errors.Is(err, data.ErrRecordNotFound) {
+			v.AddError("token", "invalid or expired token")
+			app.failedValidationResponse(w, r, v.Errors)
+		} else {
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	// update the user activated
+	user.Activated = true
+
+	//save the update to the database
+	err = app.models.Users.UpdateUser(user)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+	//if everything went ok, then delete all activation tokens
+	err = app.models.Token.DeleteAllForUser(user.ID, data.ScopeActivation)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	//Send the updated user details to the client json response
+	err = app.writeJSON(w, http.StatusOK, envelope{"user": user}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
