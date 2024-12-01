@@ -59,3 +59,34 @@ func (app *application) failedValidationResponse(w http.ResponseWriter, r *http.
 func (app *application) rateLimitExceededResponse(w http.ResponseWriter, r *http.Request) {
 	app.errorResponse(w, r, http.StatusTooManyRequests, nil)
 }
+
+func (app *application) editConflictResponse(w http.ResponseWriter, r *http.Request) {
+	message := "unable to update th record due to an edit conflict, please try again"
+	app.errorResponse(w, r, http.StatusConflict, message)
+}
+
+func (app *application) invalidCredentialsResponse(w http.ResponseWriter, r *http.Request) {
+	message := "invalid credentials"
+	app.errorResponse(w, r, http.StatusUnauthorized, message)
+}
+
+func (app *application) invalidAuthenticationTokenResponse(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("WWW-Authenticate", "Bearer")
+	message := "invalid or missing authentication token"
+	app.errorResponse(w, r, http.StatusUnauthorized, message)
+}
+
+func (app *application) authenticationRequiredResponse(w http.ResponseWriter, r *http.Request) {
+	message := "you must be authenticated"
+	app.errorResponse(w, r, http.StatusUnauthorized, message)
+}
+
+func (app *application) inActiveUserAccount(w http.ResponseWriter, r *http.Request) {
+	message := "you account must be activated to access this resource"
+	app.errorResponse(w, r, http.StatusForbidden, message)
+}
+
+func (app *application) notPermittedResponse(w http.ResponseWriter, r *http.Request){
+  message := "you account doesn't have necessary permissions to access this resource"
+  app.errorResponse(w,r,http.StatusForbidden, message)
+}
