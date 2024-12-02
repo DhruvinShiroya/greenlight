@@ -1,12 +1,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/DhruvinShiroya/greenlight/internal/data"
+	"github.com/DhruvinShiroya/greenlight/internal/validator"
 	"golang.org/x/time/rate"
 )
 
@@ -95,4 +99,101 @@ func (app *application) rateLimit(next http.Handler) http.Handler { // define cl
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (app *application) authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// add header "Vary": "Authorization" response my vary based on authorization header
+
+		w.Header().Set("Vary", "Authorization")
+		// get the authorization header
+		authorizationHeader := r.Header.Get("Authorization")
+		if authorizationHeader == "" {
+			r = app.contextSetUser(r, data.AnonymousUser)
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		headerParts := strings.Split(authorizationHeader, " ")
+		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
+			fmt.Println("token are not correct")
+			app.invalidAuthenticationTokenResponse(w, r)
+			return
+		}
+
+		token := headerParts[1]
+
+		// validate token
+		v := validator.New()
+		if data.ValidateTokenPlainText(v, token); !v.Valid() {
+			app.invalidCredentialsResponse(w, r)
+			return
+		}
+
+		user, err := app.models.Users.GetForToken(data.ScopeAuthentication, token)
+		if err != nil {
+			switch {
+			case errors.Is(err, data.ErrRecordNotFound):
+				app.invalidAuthenticationTokenResponse(w, r)
+			default:
+				app.serverErrorResponse(w, r, err)
+			}
+			return
+		}
+		// set the user to response writer
+		r = app.contextSetUser(r, user)
+		next.ServeHTTP(w, r)
+
+	})
+}
+
+func (app *application) RequiredActivatedUser(next http.HandlerFunc) http.HandlerFunc {
+	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// use context get user helper that
+		user := app.contextGetUser(r)
+
+		if !user.Activated {
+			app.inActiveUserAccount(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+	return app.RequiredAuthenticatedUser(fn)
+}
+
+func (app *application) RequiredAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := app.contextGetUser(r)
+
+		if user.IsAnonymous() {
+			app.authenticationRequiredResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+
+	})
+
+}
+
+func (app *application) requirePermission(code string, next http.HandlerFunc) http.HandlerFunc {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		// get the user from request
+		user := app.contextGetUser(r)
+		// get the permission slice for user
+
+		permissions, err := app.models.Permissions.GetAllForUser(user.ID)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+		// status forbidden for users without valid permission
+		if !permissions.Include(code) {
+			app.notPermittedResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	}
+	return app.RequiredActivatedUser(fn)
 }
