@@ -15,14 +15,18 @@ var (
 // add movie model to struct model
 // for unit testing the any models we will replace the modles struct with interface
 type Models struct {
-	Movies MovieModel
-	Users  UserModel
+	Movies      MovieModel
+	Users       UserModel
+	Token       TokenModel
+	Permissions PermissionsModel
 }
 
 func NewModel(db *sql.DB) Models {
 	return Models{
-		Movies: MovieModel{DB: db},
-		Users:  UserModel{DB: db},
+		Movies:      MovieModel{DB: db},
+		Users:       UserModel{DB: db},
+		Token:       TokenModel{DB: db},
+		Permissions: PermissionsModel{DB: db},
 	}
 }
 
