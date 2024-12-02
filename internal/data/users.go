@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"time"
@@ -9,6 +10,8 @@ import (
 	"github.com/DhruvinShiroya/greenlight/internal/validator"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var AnonymousUser = &User{}
 
 // Define user struct for individual user
 // hide details like password and version number with `json:"-"` tag for details not to addpear in json
@@ -21,6 +24,11 @@ type User struct {
 	Password  password  `json:"-"`
 	Activated bool      `json:"activated"`
 	Version   int       `json:"-"`
+}
+
+// check if userinstalce is AnonymousUser
+func (u *User) IsAnonymous() bool {
+  return u == AnonymousUser
 }
 
 // custom password for saving plain password text and hashed version.
@@ -123,7 +131,7 @@ func (m UserModel) Insert(user *User) error {
 
 // Retrive user by Email
 func (m UserModel) GetByEmail(email string) (*User, error) {
-	query := `SELECT SELECT id, created_at, name, email, password_hash, activated, version
+	query := `SELECT id, created_at, name, email, password_hash, activated, version
                   FROM users WHERE email = $1`
 
 	var user User
@@ -135,7 +143,7 @@ func (m UserModel) GetByEmail(email string) (*User, error) {
 		&user.CreateAt,
 		&user.Name,
 		&user.Email,
-		&user.Password,
+		&user.Password.hash,
 		&user.Activated,
 		&user.Version,
 	)
@@ -185,4 +193,40 @@ func (m UserModel) UpdateUser(user *User) error {
 	}
 
 	return nil
+}
+
+func (m UserModel) GetForToken(scope string, token string) (*User, error) {
+	query := `
+    SELECT users.id, users.created_at, users.name, users.email, users.password_hash, users.activated, users.version
+    FROM users
+    INNER JOIN tokens
+    ON users.id = tokens.user_id
+    WHERE tokens.hash = $1 AND tokens.scope = $2 AND tokens.expiry > $3 
+  `
+	hash := sha256.Sum256([]byte(token))
+	args := []interface{}{hash[:], scope, time.Now()}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	var user User
+
+	err := m.DB.QueryRowContext(ctx, query, args...).Scan(
+		&user.ID,
+		&user.CreateAt,
+		&user.Name,
+		&user.Email,
+		&user.Password.hash,
+		&user.Activated,
+		&user.Version,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+	return &user, nil
+
 }
